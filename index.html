@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Word 文档翻译工具</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f5f7fa;
+      color: #243447;
+    }
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      color: #1f2d3d;
+    }
+    .subtitle {
+      margin: 0 0 24px;
+      color: #66788a;
+      font-size: 14px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 18px rgba(31, 45, 61, 0.08);
+      margin-bottom: 20px;
+    }
+    .step-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      color: #1f2d3d;
+    }
+    .num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #2f80ed;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex: 0 0 24px;
+    }
+    .info-box {
+      background: #fff9e8;
+      border-left: 4px solid #f5b700;
+      padding: 14px 16px;
+      line-height: 1.7;
+      font-size: 13px;
+      color: #574200;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #2f80ed;
+      color: #fff;
+      transition: background 0.2s ease, transform 0.2s ease;
+    }
+    button:hover:not(:disabled) {
+      background: #1f6fd8;
+      transform: translateY(-1px);
+    }
+    button:disabled {
+      background: #bcc7d1;
+      cursor: not-allowed;
+      transform: none;
+    }
+    button.success {
+      background: #24a148;
+    }
+    button.success:hover:not(:disabled) {
+      background: #1e8b3d;
+    }
+    button.secondary {
+      background: #697b8c;
+    }
+    button.secondary:hover:not(:disabled) {
+      background: #546474;
+    }
+    input[type="file"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px dashed #b8c4d0;
+      border-radius: 10px;
+      background: #f7fafc;
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 420px;
+      border: 1px solid #d5dde5;
+      border-radius: 10px;
+      padding: 14px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #23303f;
+      background: #fbfdff;
+    }
+    .status {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.6;
+      display: none;
+      white-space: pre-wrap;
+    }
+    .status.info {
+      background: #eaf4ff;
+      color: #1a5fb4;
+    }
+    .status.ok {
+      background: #e8f8ee;
+      color: #176c35;
+    }
+    .status.err {
+      background: #fdeeee;
+      color: #a12626;
+    }
+    .hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #6f8091;
+      line-height: 1.6;
+    }
+    code {
+      background: #f1f5f9;
+      border-radius: 4px;
+      padding: 2px 6px;
+    }
+    @media (max-width: 900px) {
+      body { padding: 16px; }
+      .grid { grid-template-columns: 1fr; }
+      textarea { min-height: 300px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Word 文档翻译工具</h1>
+    <p class="subtitle">本地提取 `.docx` 为可翻译 Markdown，并在翻译后回填到原始 Word，尽量保留表格、图片和样式。</p>
+
+    <div class="info-box">
+      <strong>使用说明</strong><br>
+      1. 上传 `.docx` 文件，点击“提取为 Markdown”。<br>
+      2. 所有可翻译文本会以 <code>⟦T编号⟧</code> 的形式逐行输出，请在翻译时保留编号和每行结构，只替换编号后的文字。<br>
+      3. 表格、图片、页眉页脚、脚注等内容不会被删除；生成译文时，工具只替换这些编号对应的文字。<br>
+      4. 所有处理都在浏览器本地完成，不上传到服务器。<br>
+      5. 建议使用 `.docx`，不支持旧版 `.doc`。
+    </div>
+
+    <div class="card">
+      <div class="step-title"><span class="num">1</span>上传原始 Word 文档</div>
+      <input type="file" id="fileInput" accept=".docx">
+      <div class="actions">
+        <button id="extractBtn" disabled>提取为 Markdown</button>
+        <button id="copyMdBtn" class="secondary" disabled>复制 Markdown</button>
+        <button id="downloadMdBtn" class="secondary" disabled>下载 Markdown</button>
+      </div>
+      <div id="status1" class="status info"></div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="step-title"><span class="num">2</span>原文 Markdown</div>
+        <textarea id="originalMd" readonly placeholder="提取后的 Markdown 会显示在这里..."></textarea>
+        <div class="hint">可直接复制给翻译工具，也可以点击“下载 Markdown”保存为 `.md` 文件。</div>
+      </div>
+
+      <div class="card">
+        <div class="step-title"><span class="num">3</span>粘贴译文 Markdown</div>
+        <textarea id="translatedMd" placeholder="把翻译后的 Markdown 粘贴到这里，保持每一行的 `⟦T编号⟧` 不变，只替换后面的文字。"></textarea>
+        <div class="hint">如果某些行不需要翻译，也可以保留原文；工具会按编号回填。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="step-title"><span class="num">4</span>生成译文 Word</div>
+      <div class="actions">
+        <button id="generateBtn" class="success" disabled>生成并下载译文 Word</button>
+      </div>
+      <div id="status2" class="status info"></div>
+    </div>
+  </div>
+
+  <script>
+    const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const XML_NS = "http://www.w3.org/XML/1998/namespace";
+    const TRANSLATABLE_PART_RE = /^word\/(document|header\d+|footer\d+|footnotes|endnotes|comments)\.xml$/i;
+
+    let originalZip = null;
+    let originalFileName = "";
+    let extractedMarkdown = "";
+    let extractionManifest = {
+      totalSegments: 0,
+      parts: []
+    };
+
+    const fileInput = document.getElementById("fileInput");
+    const extractBtn = document.getElementById("extractBtn");
+    const copyMdBtn = document.getElementById("copyMdBtn");
+    const downloadMdBtn = document.getElementById("downloadMdBtn");
+    const generateBtn = document.getElementById("generateBtn");
+    const originalMdEl = document.getElementById("originalMd");
+    const translatedMdEl = document.getElementById("translatedMd");
+    const status1 = document.getElementById("status1");
+    const status2 = document.getElementById("status2");
+
+    fileInput.addEventListener("change", handleFileChange);
+    extractBtn.addEventListener("click", extractDocument);
+    copyMdBtn.addEventListener("click", copyMarkdown);
+    downloadMdBtn.addEventListener("click", downloadMarkdown);
+    generateBtn.addEventListener("click", generateTranslatedWord);
+
+    function showStatus(el, message, type) {
+      el.style.display = "block";
+      el.className = "status " + (type || "info");
+      el.textContent = message;
+    }
+
+    function resetWorkspace() {
+      originalZip = null;
+      originalFileName = "";
+      extractedMarkdown = "";
+      extractionManifest = { totalSegments: 0, parts: [] };
+      originalMdEl.value = "";
+      translatedMdEl.value = "";
+      copyMdBtn.disabled = true;
+      downloadMdBtn.disabled = true;
+      generateBtn.disabled = true;
+    }
+
+    function handleFileChange(event) {
+      resetWorkspace();
+      const file = event.target.files && event.target.files[0];
+      if (!file) {
+        extractBtn.disabled = true;
+        return;
+      }
+      originalFileName = file.name.replace(/\.docx$/i, "");
+      extractBtn.disabled = false;
+      showStatus(status1, "已选择文件：" + file.name, "info");
+      status2.style.display = "none";
+    }
+
+    async function extractDocument() {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        showStatus(status1, "请先选择一个 .docx 文件。", "err");
+        return;
+      }
+
+      try {
+        showStatus(status1, "正在解析 .docx 并提取可翻译内容...", "info");
+        const buffer = await file.arrayBuffer();
+        const zip = await JSZip.loadAsync(buffer);
+        const partPaths = listTranslatableParts(zip);
+
+        if (!partPaths.length) {
+          throw new Error("未找到可处理的 Word XML 内容，文件可能不是标准 .docx。");
+        }
+
+        const manifest = { totalSegments: 0, parts: [] };
+        const mdSections = [];
+        let nextId = 1;
+
+        for (const partPath of partPaths) {
+          const xmlFile = zip.file(partPath);
+          if (!xmlFile) {
+            continue;
+          }
+
+          const xml = await xmlFile.async("string");
+          const result = buildMarkdownForPart(xml, partPath, nextId);
+          nextId = result.nextId;
+          manifest.totalSegments += result.segmentCount;
+          manifest.parts.push({
+            path: partPath,
+            segmentIds: result.segmentIds
+          });
+
+          if (result.segmentCount > 0) {
+            mdSections.push(result.markdown.trim());
+          }
+        }
+
+        if (!manifest.totalSegments) {
+          throw new Error("文档中没有找到可翻译的文字节点。");
+        }
+
+        originalZip = zip;
+        extractionManifest = manifest;
+        extractedMarkdown = mdSections.join("\n\n---\n\n").trim() + "\n";
+        originalMdEl.value = extractedMarkdown;
+        translatedMdEl.value = extractedMarkdown;
+        copyMdBtn.disabled = false;
+        downloadMdBtn.disabled = false;
+        generateBtn.disabled = false;
+
+        showStatus(
+          status1,
+          "提取完成，共找到 " + manifest.totalSegments + " 个文本片段，覆盖 " + manifest.parts.length + " 个 Word XML 部分。",
+          "ok"
+        );
+      } catch (error) {
+        console.error(error);
+        showStatus(status1, "提取失败：" + error.message, "err");
+      }
+    }
+
+    function listTranslatableParts(zip) {
+      return Object.keys(zip.files)
+        .filter((path) => TRANSLATABLE_PART_RE.test(path))
+        .sort((a, b) => {
+          if (a === "word/document.xml") return -1;
+          if (b === "word/document.xml") return 1;
+          return a.localeCompare(b, "zh-CN");
+        });
+    }
+
+    function buildMarkdownForPart(xml, partPath, startId) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xml, "application/xml");
+      ensureValidXml(doc, partPath);
+
+      const allTextNodes = Array.from(doc.getElementsByTagNameNS(W_NS, "t"));
+      const segmentIds = [];
+      let currentId = startId;
+
+      for (const node of allTextNodes) {
+        node.setAttribute("data-tid", String(currentId));
+        segmentIds.push(currentId);
+        currentId += 1;
+      }
+
+      const lines = [];
+      const ctx = {
+        paragraphNo: 0,
+        tableNo: 0
+      };
+
+      lines.push("# " + partPath);
+      lines.push("");
+
+      const root = getMainContainer(doc);
+      processContainer(root, lines, ctx, "");
+
+      return {
+        markdown: lines.join("\n").trim(),
+        segmentCount: allTextNodes.length,
+        segmentIds: segmentIds,
+        nextId: currentId
+      };
+    }
+
+    function ensureValidXml(doc, partPath) {
+      const errorNode = doc.getElementsByTagName("parsererror")[0];
+      if (errorNode) {
+        throw new Error(partPath + " 解析失败");
+      }
+    }
+
+    function getMainContainer(doc) {
+      const body = doc.getElementsByTagNameNS(W_NS, "body")[0];
+      return body || doc.documentElement;
+    }
+
+    function processContainer(node, lines, ctx, scopeLabel) {
+      const children = Array.from(node.childNodes).filter((child) => child.nodeType === 1);
+
+      for (const child of children) {
+        const name = child.localName;
+
+        if (name === "p") {
+          renderParagraph(child, lines, ctx, scopeLabel);
+        } else if (name === "tbl") {
+          renderTable(child, lines, ctx);
+        } else if (name === "sdt") {
+          const content = getFirstChildByLocalName(child, "sdtContent");
+          if (content) {
+            processContainer(content, lines, ctx, scopeLabel);
+          }
+        }
+      }
+    }
+
+    function renderParagraph(paragraphNode, lines, ctx, scopeLabel) {
+      const textNodes = Array.from(paragraphNode.getElementsByTagNameNS(W_NS, "t"));
+      if (!textNodes.length) {
+        return;
+      }
+
+      const preview = createPreview(textNodes.map((node) => node.textContent || ""));
+      const titlePrefix = scopeLabel ? scopeLabel + " / " : "";
+      ctx.paragraphNo += 1;
+
+      lines.push("## " + titlePrefix + "段落 " + ctx.paragraphNo);
+      if (preview) {
+        lines.push("> " + preview);
+      } else {
+        lines.push("> [空白文本片段]");
+      }
+
+      for (const textNode of textNodes) {
+        const tid = textNode.getAttribute("data-tid");
+        const value = normalizeLineValue(textNode.textContent || "");
+        lines.push("- ⟦T" + tid + "⟧ " + value);
+      }
+
+      lines.push("");
+    }
+
+    function renderTable(tableNode, lines, ctx) {
+      ctx.tableNo += 1;
+      const tableNo = ctx.tableNo;
+      lines.push("## 表格 " + tableNo);
+
+      const rows = getDirectChildrenByLocalName(tableNode, "tr");
+      if (rows.length) {
+        for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+          const cells = getDirectChildrenByLocalName(rows[rowIndex], "tc");
+          const cellPreviews = cells.map((cell) => {
+            const cellTexts = Array.from(cell.getElementsByTagNameNS(W_NS, "t")).map((node) => node.textContent || "");
+            return createPreview(cellTexts) || "[空]";
+          });
+          lines.push("> 第 " + (rowIndex + 1) + " 行: " + cellPreviews.join(" | "));
+        }
+        lines.push("");
+      }
+
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+        const cells = getDirectChildrenByLocalName(rows[rowIndex], "tc");
+        for (let cellIndex = 0; cellIndex < cells.length; cellIndex += 1) {
+          const label = "表格 " + tableNo + " / R" + (rowIndex + 1) + "C" + (cellIndex + 1);
+          processContainer(cells[cellIndex], lines, ctx, label);
+        }
+      }
+    }
+
+    function getFirstChildByLocalName(node, localName) {
+      return Array.from(node.childNodes).find((child) => child.nodeType === 1 && child.localName === localName) || null;
+    }
+
+    function getDirectChildrenByLocalName(node, localName) {
+      return Array.from(node.childNodes).filter((child) => child.nodeType === 1 && child.localName === localName);
+    }
+
+    function createPreview(parts) {
+      return parts.join("")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function normalizeLineValue(text) {
+      return text.replace(/\r?\n/g, "\\n");
+    }
+
+    async function copyMarkdown() {
+      if (!originalMdEl.value) {
+        return;
+      }
+
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(originalMdEl.value);
+        } else {
+          originalMdEl.removeAttribute("readonly");
+          originalMdEl.select();
+          document.execCommand("copy");
+          originalMdEl.setAttribute("readonly", "readonly");
+        }
+        showStatus(status1, "Markdown 已复制到剪贴板。", "ok");
+      } catch (error) {
+        console.error(error);
+        showStatus(status1, "复制失败，请手动复制文本。", "err");
+      }
+    }
+
+    function downloadMarkdown() {
+      if (!originalMdEl.value) {
+        return;
+      }
+      const blob = new Blob([originalMdEl.value], { type: "text/markdown;charset=utf-8" });
+      downloadBlob(blob, (originalFileName || "document") + ".md");
+      showStatus(status1, "Markdown 文件已开始下载。", "ok");
+    }
+
+    async function generateTranslatedWord() {
+      if (!originalZip || !extractionManifest.parts.length) {
+        showStatus(status2, "请先上传并提取原始文档。", "err");
+        return;
+      }
+
+      try {
+        showStatus(status2, "正在回填译文并生成 Word...", "info");
+
+        const translationMap = parseTranslatedMarkdown(translatedMdEl.value);
+        if (!translationMap.size) {
+          throw new Error("未识别到任何 `⟦T编号⟧` 行，请检查译文 Markdown 格式。");
+        }
+
+        const zip = await JSZip.loadAsync(await originalZip.generateAsync({ type: "arraybuffer" }));
+        let missingCount = 0;
+
+        for (const part of extractionManifest.parts) {
+          const xmlFile = zip.file(part.path);
+          if (!xmlFile) {
+            continue;
+          }
+
+          const xml = await xmlFile.async("string");
+          const parser = new DOMParser();
+          const serializer = new XMLSerializer();
+          const doc = parser.parseFromString(xml, "application/xml");
+          ensureValidXml(doc, part.path);
+
+          const textNodes = Array.from(doc.getElementsByTagNameNS(W_NS, "t"));
+          if (textNodes.length < part.segmentIds.length) {
+            throw new Error(part.path + " 中的文本节点数量与提取时不一致，无法安全回填。");
+          }
+
+          for (let index = 0; index < part.segmentIds.length; index += 1) {
+            const segmentId = part.segmentIds[index];
+            const textNode = textNodes[index];
+            const originalText = textNode.textContent || "";
+            const translatedText = translationMap.has(segmentId) ? translationMap.get(segmentId) : originalText;
+            if (!translationMap.has(segmentId)) {
+              missingCount += 1;
+            }
+            setWordText(textNode, translatedText);
+          }
+
+          zip.file(part.path, serializer.serializeToString(doc));
+        }
+
+        const blob = await zip.generateAsync({
+          type: "blob",
+          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        });
+
+        downloadBlob(blob, (originalFileName || "document") + "_translated.docx");
+
+        const message = missingCount
+          ? "生成完成，文件已开始下载。注意：有 " + missingCount + " 个编号未在译文中找到，已保留原文。"
+          : "生成完成，文件已开始下载。";
+        showStatus(status2, message, "ok");
+      } catch (error) {
+        console.error(error);
+        showStatus(status2, "生成失败：" + error.message, "err");
+      }
+    }
+
+    function parseTranslatedMarkdown(markdown) {
+      const map = new Map();
+      const normalized = String(markdown || "").replace(/\r\n?/g, "\n");
+      const lines = normalized.split("\n");
+
+      for (const line of lines) {
+        const match = line.match(/^\s*(?:[-*]\s*)?⟦T(\d+)⟧\s?(.*)$/);
+        if (!match) {
+          continue;
+        }
+        const id = Number(match[1]);
+        const value = (match[2] || "").replace(/\\n/g, "\n");
+        map.set(id, value);
+      }
+
+      return map;
+    }
+
+    function setWordText(textNode, value) {
+      const text = String(value == null ? "" : value);
+      textNode.textContent = text;
+
+      if (/^\s|\s$/.test(text)) {
+        textNode.setAttributeNS(XML_NS, "xml:space", "preserve");
+      } else {
+        textNode.removeAttributeNS(XML_NS, "space");
+        textNode.removeAttribute("xml:space");
+      }
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
