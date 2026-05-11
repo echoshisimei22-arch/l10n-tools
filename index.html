@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Word 文档翻译工具</title>
+  <title>Word转MD工具</title>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -170,23 +170,23 @@
 </head>
 <body>
   <div class="container">
-    <h1>Word 文档翻译工具</h1>
-    <p class="subtitle">本地提取 `.docx` 为可翻译 Markdown，并在翻译后回填到原始 Word，尽量保留表格、图片和样式。</p>
+    <h1>Word转MD工具</h1>
+    <p class="subtitle">本地将 `.docx` 提取为可翻译 Markdown，并在翻译后回填生成新的 Word，尽量保留表格、图片和样式。</p>
 
     <div class="info-box">
       <strong>使用说明</strong><br>
-      1. 上传 `.docx` 文件，点击“提取为 Markdown”。<br>
-      2. 所有可翻译文本会以 <code>⟦T编号⟧</code> 的形式逐行输出，请在翻译时保留编号和每行结构，只替换编号后的文字。<br>
-      3. 表格、图片、页眉页脚、脚注等内容不会被删除；生成译文时，工具只替换这些编号对应的文字。<br>
-      4. 所有处理都在浏览器本地完成，不上传到服务器。<br>
-      5. 建议使用 `.docx`，不支持旧版 `.doc`。
+      1. 上传 `.docx` 文件后，点击“提取 Markdown 内容”。<br>
+      2. 系统会把可翻译文本整理成带编号的 Markdown；翻译时请完整保留所有标记和编号，只翻译编号后面的正文。<br>
+      3. 表格、图片、页眉页脚、脚注等内容不会被删除；回填时系统只替换对应编号的文字内容。<br>
+      4. 翻译完成后，把译文 Markdown 粘贴回右侧文本框，再点击“生成并下载 Word”即可。<br>
+      5. 所有处理都在浏览器本地完成，文件不会上传到服务器；建议使用 `.docx`，不支持旧版 `.doc`。
     </div>
 
     <div class="card">
       <div class="step-title"><span class="num">1</span>上传原始 Word 文档</div>
       <input type="file" id="fileInput" accept=".docx">
       <div class="actions">
-        <button id="extractBtn" disabled>提取为 Markdown</button>
+        <button id="extractBtn" disabled>提取 Markdown 内容</button>
         <button id="copyMdBtn" class="secondary" disabled>复制 Markdown</button>
         <button id="downloadMdBtn" class="secondary" disabled>下载 Markdown</button>
       </div>
@@ -197,7 +197,7 @@
       <div class="card">
         <div class="step-title"><span class="num">2</span>原文 Markdown</div>
         <textarea id="originalMd" readonly placeholder="提取后的 Markdown 会显示在这里..."></textarea>
-        <div class="hint">可直接复制给翻译工具，也可以点击“下载 Markdown”保存为 `.md` 文件。</div>
+        <div class="hint">可直接复制给 AI 或人工翻译，也可以点击“下载 Markdown”保存为 `.md` 文件。</div>
       </div>
 
       <div class="card">
@@ -208,9 +208,9 @@
     </div>
 
     <div class="card">
-      <div class="step-title"><span class="num">4</span>生成译文 Word</div>
+      <div class="step-title"><span class="num">4</span>回填并生成 Word</div>
       <div class="actions">
-        <button id="generateBtn" class="success" disabled>生成并下载译文 Word</button>
+        <button id="generateBtn" class="success" disabled>生成并下载 Word</button>
       </div>
       <div id="status2" class="status info"></div>
     </div>
@@ -272,19 +272,19 @@
       }
       originalFileName = file.name.replace(/\.docx$/i, "");
       extractBtn.disabled = false;
-      showStatus(status1, "已选择文件：" + file.name, "info");
+      showStatus(status1, "已选择文件：" + file.name + "。可以开始提取 Markdown 内容。", "info");
       status2.style.display = "none";
     }
 
     async function extractDocument() {
       const file = fileInput.files && fileInput.files[0];
       if (!file) {
-        showStatus(status1, "请先选择一个 .docx 文件。", "err");
+        showStatus(status1, "请先选择一个 `.docx` 文件。", "err");
         return;
       }
 
       try {
-        showStatus(status1, "正在解析 .docx 并提取可翻译内容...", "info");
+        showStatus(status1, "正在解析文档并提取可翻译内容，请稍候...", "info");
         const buffer = await file.arrayBuffer();
         const zip = await JSZip.loadAsync(buffer);
         const partPaths = listTranslatableParts(zip);
@@ -332,7 +332,7 @@
 
         showStatus(
           status1,
-          "提取完成，共找到 " + manifest.totalSegments + " 个文本片段，覆盖 " + manifest.parts.length + " 个 Word XML 部分。",
+          "提取完成，共找到 " + manifest.totalSegments + " 个可翻译片段，覆盖 " + manifest.parts.length + " 个文档部分。现在可以复制或下载 Markdown 进行翻译。",
           "ok"
         );
       } catch (error) {
@@ -488,6 +488,13 @@
       return text.replace(/\r?\n/g, "\\n");
     }
 
+    const COPY_TRANSLATION_NOTICE = [
+      "请在翻译时完整保留所有标记，且不要翻译这些标记。",
+      "例如：#、>、段落 1/2/3、表格 1、R1C1、---、- ⟦T编号⟧ 等，都必须与原文保持一模一样。",
+      "你只需要翻译每个编号后面的正文文字。",
+      "如果这些标记丢失、被修改或被翻译，系统将无法按原来的 Word 格式还原译文。"
+    ].join("\n");
+
     async function copyMarkdown() {
       if (!originalMdEl.value) {
         return;
@@ -502,10 +509,11 @@
           document.execCommand("copy");
           originalMdEl.setAttribute("readonly", "readonly");
         }
-        showStatus(status1, "Markdown 已复制到剪贴板。", "ok");
+        showStatus(status1, "Markdown 已复制到剪贴板。翻译时请完整保留所有标记和编号。", "ok");
+        window.alert(COPY_TRANSLATION_NOTICE);
       } catch (error) {
         console.error(error);
-        showStatus(status1, "复制失败，请手动复制文本。", "err");
+        showStatus(status1, "复制失败，请手动复制左侧文本框中的 Markdown 内容。", "err");
       }
     }
 
@@ -515,17 +523,17 @@
       }
       const blob = new Blob([originalMdEl.value], { type: "text/markdown;charset=utf-8" });
       downloadBlob(blob, (originalFileName || "document") + ".md");
-      showStatus(status1, "Markdown 文件已开始下载。", "ok");
+      showStatus(status1, "Markdown 文件已开始下载，可直接发送给翻译人员或翻译工具。", "ok");
     }
 
     async function generateTranslatedWord() {
       if (!originalZip || !extractionManifest.parts.length) {
-        showStatus(status2, "请先上传并提取原始文档。", "err");
+        showStatus(status2, "请先上传原始 `.docx` 文件，并完成 Markdown 提取。", "err");
         return;
       }
 
       try {
-        showStatus(status2, "正在回填译文并生成 Word...", "info");
+        showStatus(status2, "正在回填译文并生成 Word，请稍候...", "info");
 
         const translationMap = parseTranslatedMarkdown(translatedMdEl.value);
         if (!translationMap.size) {
@@ -574,7 +582,7 @@
         downloadBlob(blob, (originalFileName || "document") + "_translated.docx");
 
         const message = missingCount
-          ? "生成完成，文件已开始下载。注意：有 " + missingCount + " 个编号未在译文中找到，已保留原文。"
+          ? "生成完成，文件已开始下载。注意：有 " + missingCount + " 个编号未在译文中找到，系统已自动保留原文。"
           : "生成完成，文件已开始下载。";
         showStatus(status2, message, "ok");
       } catch (error) {
